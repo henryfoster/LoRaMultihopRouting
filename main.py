@@ -1,4 +1,5 @@
-import connection.commands
+from connection.lora_connection import *
+
 
 def command_line():
     while 1:
@@ -10,3 +11,6 @@ def command_line():
         elif eingabe == "1":
             message = input("message: ")
             send_message(message)
+
+
+command_line()

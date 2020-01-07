@@ -1,4 +1,16 @@
 {
-
-
+  "carrierfrequency": "433000000",
+  "transmissionpower": "20",
+  "modulationbandwidth": "8",
+  "spread": "12",
+  "errorcorrection": "1",
+  "crc": "1",
+  "implicidheader": "0",
+  "onetimereception": "0",
+  "frequencymodulation": "0",
+  "frequencymodulationperiod": "0",
+  "receptiontimelimittime": "3000",
+  "userdatalength": "8",
+  "preamblelength": "4",
+  "freq": "0015"
 }
