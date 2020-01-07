@@ -1,3 +1,6 @@
+#Script zur Steuerung des programms
+#Author: Eduard Andreev
+
 from connection.lora_connection import *
 
 

@@ -1,8 +1,15 @@
 # Module for handling communication between LoRa modules
 # Author: Eduard Andreev
 
+from _thread import start_new_thread
 from connection.serial_connection import *
 from config.ConfigReader import get_config
+from config.LogWriter import write_log
+
+
+liste = []
+message_box = []
+routing_table = {}
 
 
 # setting up LoRa Connection
@@ -24,6 +31,26 @@ def load_lora_config(lora_config):
                     f"\r\n")
 
 
+def receive():
+    while 1:
+        try:
+            out = ser.readline().decode("utf-8")
+            #add_adress(out)
+            #build_routing_table(out)
+
+            #debug-------------------------------------------------------------
+            #print("lora_connection: " + out.rstrip("\n"))
+            if not 'AT+SEND' in out:
+                message = out.replace("\n", "").rstrip("\r")
+                message_box.append(message)
+                print("lora_connection: " + message)
+                write_log(message, "resources/receive.log")
+
+
+        except UnicodeDecodeError:
+            print("Error while decoding utf-8")
+
+
 # loading config from ./resources/LoRaConfig.json as dict
 config = get_config("resources/LoRaConfig.json")
 
@@ -39,4 +66,6 @@ send_at_command(f"AT+DEST=FFFF\r\n")
 # setting Receiver mode RX
 send_at_command("AT+RX\r\n")
 
+# empfange Daten
+start_new_thread(receive, ())
 # send_message("hello from lora connection")
