@@ -7,7 +7,6 @@ def get_config(file_name):
     config_file = open(file_name, "r", encoding="utf-8")
     config = json.load(config_file)
     config_file.close()
-    print(config)
     return config
 
 

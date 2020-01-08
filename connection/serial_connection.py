@@ -20,20 +20,20 @@ def load_serial_config(file_name):
 
 
 # Init: serlial
-ser = load_serial_config("resources/SerialConfig.json")
+ser = load_serial_config("../resources/SerialConfig.json")
 
 
 # sends a command via the serial connection
 # main purpose are AT commands
 def send_at_command(command):
     ser.write(str.encode(command))
-    time.sleep(1)
+    time.sleep(0.1)
 
 
 # used to send 'String' messages via AT+SEND
 def send_message(message):
     send_at_command("AT+SEND=" + str(len(message)) + "\r\n")
-    time.sleep(1)
+    time.sleep(0.1)
     send_at_command(str(message) + "\r\n")
 
 
