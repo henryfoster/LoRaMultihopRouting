@@ -5,12 +5,13 @@ import time
 
 class Message:
     def __init__(self, dest, src, ttl, seq, payload):
+        super(Message, self).__init__()
         self.dest = dest
         self.src = src
         self.ttl = ttl
         self.seq = seq
         self.payload = payload
-        self.timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        # self.timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
 
 
     # dest
@@ -48,15 +49,15 @@ class Message:
     def get_payload(self):
         return self.payload
 
-    #timestamp
-    def get_timestamp(self):
-        return self.timestamp
+    # #timestamp
+    # def get_timestamp(self):
+    #     return self.timestamp
 
-    def __eq__(self, other):
-        return self.dest == other.dest and self.src == other.src and self.payload == other.payload
+    # def __eq__(self, other):
+    #     return self.dest == other.dest and self.src == other.src and self.payload == other.payload
 
     def __str__(self):
-        return self.dest + " " + self.src + " " + str(self.ttl) + " " + str(self.seq) + " " + self.payload + " " + self.timestamp
+        return self.dest + " " + self.src + " " + str(self.ttl) + " " + str(self.seq) + " " + self.payload
 
     def __repr__(self):
-        return self.dest + " " + self.src + " " + str(self.ttl) + " " + str(self.seq) + " " + self.payload + " " + self.timestamp
+        return self.dest + " " + self.src + " " + str(self.ttl) + " " + str(self.seq) + " " + self.payload

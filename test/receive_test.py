@@ -1,8 +1,8 @@
 # Script for testing the recieve functionality of the Programm
 import time
-
 from serial import Serial
 from config.ConfigReader import get_config
+
 
 serial_config = get_config("../resources/SerialConfig.json")
 
