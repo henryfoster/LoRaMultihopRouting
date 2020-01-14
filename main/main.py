@@ -2,7 +2,7 @@
 #Author: Eduard Andreev
 import time
 from _thread import start_new_thread
-from threading import Lock
+from threading import Lock, Thread
 from config.ConfigReader import get_config
 from connection.lora_connection import load_lora_config
 from connection.serial_connection import SerialConnection
@@ -27,11 +27,22 @@ time.sleep(0.5)
 buffer_list = []
 liste = []
 message_box = []
-example_route = Route("0014",1,"0014")
-routing_table = {"0014" : example_route}
+######example_route = Route("0014",1,"0014")
+routing_table = {} # "0014" : example_route
 
 
-
+def change_dest(addr):
+    ser.write(str.encode(f"AT+DEST={addr}\r\n"))
+    trys = 0
+    while trys < 10:
+        time.sleep(0.5)
+        for i in buffer_list:
+            if "AT,OK" in i:
+                buffer_list.remove(i)
+                print(f"change_dest to ({addr}): removing AT,OK from bufferlist")
+                trys = 10
+                break
+        trys += 1
 
 # used to send 'String' messages via AT+SEND
 def send_message(message):
@@ -74,10 +85,11 @@ def receive():
     while 1:
         try:
             out = ser.readline().decode("utf-8")
-            print("Recieved: " + out)
+            # print("Recieved: " + out)
             buffer_list.append(out)
-            print("Recieved buffer: ")
-            print(buffer_list)
+            # print("Recieved buffer: ")
+            # print(buffer_list)
+
             #print("out: "+ out)
             #if "LR" in out:
             #    handle_incomming_message(out)
@@ -118,7 +130,7 @@ def forward_chat_message(destination, source, ttl, seq, payload):
 # Type: 01
 def self_propagation():
     while True:
-        time.sleep(10)
+        time.sleep(100)
         message_string = f"01FFFF{lora_config['freq']}0100"
         send_message(message_string)
 
@@ -160,6 +172,9 @@ def handle_incomming_message(message):                                          
         #message = message.replace(' ', '')
         message = message.replace('\r', '')
         message = message.replace('\n', '')
+        # LR,0016,0E,01FFFF00160100
+        real_src =  message[3:7]
+        print("Real Adress: " + real_src)
         message = message[11:]
         flag = message[:2]
         dest = message[2:6]
@@ -209,9 +224,10 @@ def handle_incomming_message(message):                                          
         else:
             print('wrong message')
     elif "AT," in message:
-        print("Handle: AT-message detected: " + message)
-        print("Buffer : ")
-        print(buffer_list)
+        #print("Handle: AT-message detected: " + message)
+        #print("Buffer : ")
+        #print(buffer_list)
+        xyz = 1
 
     else:
         print("popping : " + message)
@@ -224,23 +240,44 @@ def handle_incomming_message(message):                                          
 
 # empfange Daten
 # receive()
-start_new_thread(receive, ())
+#start_new_thread(receive, ())
+#start_new_thread(check_buffer, ())
+#start_new_thread(self_propagation, ())
 
-start_new_thread(check_buffer, ())
+# New threading module
+receive_thread = Thread(target=receive)
+check_buffer_thread = Thread(target=check_buffer)
+selfpropagation_thread = Thread(target=self_propagation)
 
-start_new_thread(self_propagation, ())
+
+receive_thread.start()
+check_buffer_thread.start()
+selfpropagation_thread.start()
+
 
 
 def command_line():
     while 1:
         eingabe = input("[1] send message\n"
+                        "[2] show Routing-Table\n"
+                        "[3] show Buffer-List\n"
+                        "[4] show Message Box"
                         "[0] exit\n"
                         "Einagbe: ")
         if eingabe == "0":
             break
         elif eingabe == "1":
-             message = input("message: ")
-             send_message(message)
-
+            addr = input("adresse: ")
+            change_dest(addr)
+            message = input("message: ")
+            send_message(message)
+            change_dest("ffff")
+        elif eingabe == "2":
+            print(routing_table)
+        elif eingabe == "3":
+            print(buffer_list)
+        elif eingabe == "4":
+            print(message_box)
 
 command_line()
+
