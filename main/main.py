@@ -4,6 +4,7 @@ import time
 from _thread import start_new_thread
 from threading import Lock, Thread
 from config.ConfigReader import get_config
+from config.LogWriter import write_log
 from connection.lora_connection import load_lora_config
 from connection.serial_connection import SerialConnection
 from models.Message import Message
@@ -48,14 +49,16 @@ def change_dest(addr):
 def send_message(message):
     lock.acquire()
     ser.write(str.encode("AT+SEND=" + str(len(message)) + "\r\n"))
+    # print(f"Message sending1: AT+SEND={str(len(message))}")
     trys = 0
     while trys < 10:
         time.sleep(0.5)
         for i in buffer_list:
             if "AT,OK" in i:
                 buffer_list.remove(i)
-                print("send_message(): removing AT,OK from bufferlist")
-                ser.write(str.encode(str(message) + "\r\n"))
+                # print("send_message(): got AT,OK from bufferlist and removing it")
+                ser.write(str.encode(f"{message}\r\n"))
+                print(f"Message sending: {message}")
                 trys = 10
                 break
         trys += 1
@@ -64,7 +67,7 @@ def send_message(message):
         time.sleep(0.5)
         for i in buffer_list:
             if "AT,SENDING" in i:
-                print("send_message(): removing AT,SENDING from bufferlist")
+                # print("send_message(): got AT,SENDING from bufferlist and removing it")
                 buffer_list.remove(i)
                 trys = 10
                 break
@@ -74,7 +77,7 @@ def send_message(message):
         time.sleep(0.5)
         for i in buffer_list:
             if "AT,SENDED" in i:
-                print("send_message(): removing AT,SENDED from bufferlist")
+                # print("send_message(): got AT,SENDED from bufferlist and removing it")
                 buffer_list.remove(i)
                 trys = 10
                 break
@@ -89,22 +92,14 @@ def receive():
             buffer_list.append(out)
             # print("Recieved buffer: ")
             # print(buffer_list)
-
-            #print("out: "+ out)
-            #if "LR" in out:
-            #    handle_incomming_message(out)
-            #elif "AT" in out:
-            #    print("KRRRRASS: " + out)
-            #debug-------------------------------------------------------------
-            #if not 'AT' in out:
-            #    mmessage = out
-            #    write_log(mmessage, "../resources/receive.log")
+            write_log(out, "../resources/receive.log")
         except UnicodeDecodeError:
             print("Error while decoding utf-8")
 
 
 # makes sure to add a leading zero if needed and casts int to string
 def add_leading_zero(number):
+    number = int(number)
     if number < 10:
         number = f"0{number}"
     return f"{number}"
@@ -112,10 +107,10 @@ def add_leading_zero(number):
 
 # Protocol: sending a message (outgoing)
 # Type: 00
-def send_chat_message(destination, source, message):
-    ttl = routing_table.get(destination)
-    ttl = add_leading_zero(ttl)
-    message_string = f"00{destination}{source}{ttl}00{message}"
+def send_chat_message(destination, source, message):                                            # ToDo: überarbeitung!!!!
+    # ttl = routing_table.get(destination)
+    # ttl = add_leading_zero(ttl)
+    message_string = f"00{destination}{source}{00}00{message}"
     send_message(message_string)
 
 
@@ -128,20 +123,22 @@ def forward_chat_message(destination, source, ttl, seq, payload):
 
 # Protocol: Self Propagation (outgoing)
 # Type: 01
-def self_propagation():
+def self_propagation():                                                                         # Tested: True
     while True:
         time.sleep(100)
         message_string = f"01FFFF{lora_config['freq']}0100"
+        change_dest("ffff")
         send_message(message_string)
 
 
 # Protocol: Routing Table Propagation (outgoing)
 # Type: 02
-def routing_table_propagation():
+def routing_table_propagation():                                                                # Tested: True
     message_string = f"02FFFF{lora_config['freq']}0100"
+    change_dest("ffff")
     for key in routing_table.keys():
         message_string += key
-        message_string += str(routing_table[key])
+        message_string += str(add_leading_zero(routing_table[key].hop_count))
     send_message(message_string)
     print("sending Routing table propagation: " + message_string)
 
@@ -159,7 +156,7 @@ def check_buffer():
         time.sleep(0.3)
         if len(buffer_list) > 0:
             output = buffer_list[0]
-            print("Buffer[0] calling handle: " + output)
+            # print("Buffer[0] calling handle: " + output)
             handle_incomming_message(output)
 
 
@@ -169,12 +166,9 @@ def handle_incomming_message(message):                                          
         buffer_list.pop(0)
         print("Buffer after LR pop: " )
         print(buffer_list)
-        #message = message.replace(' ', '')
         message = message.replace('\r', '')
         message = message.replace('\n', '')
-        # LR,0016,0E,01FFFF00160100
         real_src =  message[3:7]
-        print("Real Adress: " + real_src)
         message = message[11:]
         flag = message[:2]
         dest = message[2:6]
@@ -200,24 +194,46 @@ def handle_incomming_message(message):                                          
             print("incomming self_propagation message")
             change = False
             if src not in routing_table:
-                routing_table[src] = 1
+                new_route = Route(src, 1, real_src)
+                routing_table[src] = new_route
                 change = True
+            if src in routing_table: # updating timestamp and hopcount                                    # ToDo: check for hopcount > 1 !!!
+                route = routing_table[src]
+                if route.hop_count > 1:
+                    routing_table[src] = Route(src, 1, real_src)
+                else:
+                    route.set_timestamp()
+                    routing_table[src] = route
             if change:
                 routing_table_propagation()
+                # print("propagiere routing tabelle platzhalter")
             print("printing routingtable :")
             print(routing_table)
-        elif flag == '06':
+        elif flag == '02':
             print('incomming routing_table_propagation')
             change = False
             for i in range(0,len(payload), 6):
                 addr = payload[i:i+4]
-                hop = payload[i+4:i+6]
-                print(addr + " " + hop)
+                hop = int(payload[i+4:i+6])
+                print(f"{addr} : {hop}")
                 if addr not in routing_table:
-                    routing_table[addr] = hop
+                    new_route = Route(addr, hop+1, real_src)
+                    routing_table[addr] = new_route
                     print(routing_table)
                     change = True
+                elif addr in routing_table:
+                    if addr == real_src and routing_table[addr].hop_count != 1:
+                        new_route = Route(addr,  1, real_src)
+                        routing_table[addr] = new_route
+                        print(routing_table)
+                        change = True
+                    elif int(hop)+1 < routing_table[addr].hop_count:
+                        new_route = Route(addr, hop+1, real_src)
+                        routing_table[addr] = new_route
+                        print(routing_table)
+                        change = True
             if change:
+                # print("Routing_Table has changed: sending new routing table! (Dummy)")
                 routing_table_propagation()
         elif flag == '05':
             print('incomming acknowlagement message')
@@ -270,8 +286,7 @@ def command_line():
             addr = input("adresse: ")
             change_dest(addr)
             message = input("message: ")
-            send_message(message)
-            change_dest("ffff")
+            send_chat_message(addr, lora_config['freq'], message)
         elif eingabe == "2":
             print(routing_table)
         elif eingabe == "3":
