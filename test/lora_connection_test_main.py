@@ -37,6 +37,10 @@ def receive():
                 message_type = "self propa: "
             elif out.startswith("02"):
                 message_type = "routing table propa: "
+            elif out.startswith("00"):
+                message_type = "chat message: "
+            elif out.startswith("05"):
+                message_type = "ack message: "
             print(f"Getting message ({message_type}): {out}")
             print(f"answering with AT,SENDING und AT,SENDED")
             serial_config.write(str.encode("AT,SENDING\r\n"))
@@ -52,6 +56,9 @@ def command_line():
                         "[2] send fake routing table Propagation\n"
                         "[3] send fake routing table Propagation hop-1\n"
                         "[4] send fake routing table Propagation longer route\n"
+                        "[5] send message to target\n"
+                        "[6] send message for forward\n"
+                        "[7] test forward ack\n"
                         "[0] exit\n"
                         "Einagbe: ")
         if eingabe == "0":
@@ -64,5 +71,11 @@ def command_line():
             serial_config.write(str.encode(f"LR,0016,12,02FFFF00160100001701\r\n"))
         elif eingabe == "4":
             serial_config.write(str.encode(f"LR,0016,12,02FFFF00160100001701001801\r\n"))
+        elif eingabe == "5":
+            serial_config.write(str.encode(f"LR,0016,12,00001500160100Hallo:0015\r\n"))
+        elif eingabe == "6":
+            serial_config.write(str.encode(f"LR,0016,12,00001700160200Hallo:0017\r\n"))
+        elif eingabe == "7":
+            serial_config.write(str.encode(f"LR,0016,12,05001700160200\r\n"))
 
 command_line()

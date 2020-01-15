@@ -1,7 +1,7 @@
-#Script zur Steuerung des programms
-#Author: Eduard Andreev
+# MAIN SCRIPT: (execute this file to start the programm)
+# Author: Eduard Andreev
+
 import time
-from _thread import start_new_thread
 from threading import Lock, Thread
 from config.ConfigReader import get_config
 from config.LogWriter import write_log
@@ -10,29 +10,29 @@ from connection.serial_connection import SerialConnection
 from models.Message import Message
 from models.Route import Route
 
+# making sure the function send_message() is only called by one thread at any given time
 lock = Lock()
 
+# loading serial config
 print("Main: laoding SerialConfig ...")
-ser_con = SerialConnection() # "../resources/SerialConfig.json"
+ser_con = SerialConnection()
 ser = ser_con.ser
 print("Main: Serial connection established")
 time.sleep(0.5)
 
+# loading LoRa config from ./resources/LoRaConfig.json as dict
 print("Main: laoding LoRa Config ...")
-# loading config from ./resources/LoRaConfig.json as dict
 lora_config = get_config("../resources/LoRaConfig.json")
 load_lora_config(lora_config, ser)
 print("Main: LoRa Config fully loaded ...")
 time.sleep(0.5)
 
 buffer_list = []
-liste = []
 message_box = []
-######example_route = Route("0014",1,"0014")
-routing_table = {} # "0014" : example_route
+routing_table = {}
 
 
-def change_dest(addr):
+def change_dest(addr):                                                                  # Tested: True
     ser.write(str.encode(f"AT+DEST={addr}\r\n"))
     trys = 0
     while trys < 10:
@@ -40,7 +40,7 @@ def change_dest(addr):
         for i in buffer_list:
             if "AT,OK" in i:
                 buffer_list.remove(i)
-                print(f"change_dest to ({addr}): removing AT,OK from bufferlist")
+                # print(f"change_dest to ({addr}): removing AT,OK from bufferlist")
                 trys = 10
                 break
         trys += 1
@@ -93,31 +93,42 @@ def receive():
             # print("Recieved buffer: ")
             # print(buffer_list)
             write_log(out, "../resources/receive.log")
+            if "AT" not in out:
+                write_log(out, "../resources/onlymessages.log")
         except UnicodeDecodeError:
             print("Error while decoding utf-8")
 
 
 # makes sure to add a leading zero if needed and casts int to string
-def add_leading_zero(number):
+def add_leading_zero(number):                                                           # Tested: True
     number = int(number)
     if number < 10:
         number = f"0{number}"
     return f"{number}"
 
 
-# Protocol: sending a message (outgoing)
+# Protocol: sending a chat message (outgoing)
 # Type: 00
-def send_chat_message(destination, source, message):                                            # ToDo: überarbeitung!!!!
-    # ttl = routing_table.get(destination)
-    # ttl = add_leading_zero(ttl)
-    message_string = f"00{destination}{source}{00}00{message}"
-    send_message(message_string)
+def send_chat_message(destination, message):                                            # Tested: True
+    if destination in routing_table:
+        ttl = routing_table.get(destination).hop_count
+        ttl = add_leading_zero(ttl)
+        message_string = f"00{destination}{lora_config['freq']}{ttl}00{message}"
+        change_dest(routing_table[destination].next_hop)
+        send_message(message_string)
+    else:
+        print("could not find Adress in routing _table! Sending blind!")
+        message_string = f"00{destination}{lora_config['freq']}{'01'}00{message}"
+        change_dest(destination)
+        send_message(message_string)
 
 
 # Protocol: forwarding message (reactive)
 # Type: 00
-def forward_chat_message(destination, source, ttl, seq, payload):
-    message_string = f"00{destination}{source}{ttl-1}{seq+1}{payload}"
+def forward_chat_message(destination, source, ttl, seq, payload):                               # Tested: True
+    change_dest(routing_table[destination].next_hop)
+    message_string = f"00{destination}{source}{add_leading_zero(ttl)}{add_leading_zero(seq)}{payload}"
+    print(f"Forwarding message to {routing_table[destination].next_hop}")
     send_message(message_string)
 
 
@@ -125,7 +136,7 @@ def forward_chat_message(destination, source, ttl, seq, payload):
 # Type: 01
 def self_propagation():                                                                         # Tested: True
     while True:
-        time.sleep(100)
+        time.sleep(60)
         message_string = f"01FFFF{lora_config['freq']}0100"
         change_dest("ffff")
         send_message(message_string)
@@ -145,10 +156,24 @@ def routing_table_propagation():                                                
 
 # Protocol: Acknowledgement (outgoing)
 # Type: 05
-def send_acknowledgement(destination):
-    ttl = routing_table.get(destination)
+def send_acknowledgement(destination):                                                        # ToDo: test so richtig???
+    ttl = routing_table.get(destination).hop_count
     ttl = add_leading_zero(ttl)
+    change_dest(routing_table[destination].next_hop)
     message_string = f"05{destination}{lora_config['freq']}{ttl}00"
+    send_message(message_string)
+    print("sending ack: " + message_string)
+
+# Protocol: Acknowledgement (reactive)
+# Type: 05
+def forward_acknowledgement(destination, source, ttl, seq):                                   # ToDo:  test  so richtig ???
+    ttl = add_leading_zero(ttl)
+    seq = add_leading_zero(seq)
+    change_dest(routing_table[destination].next_hop)
+    message_string = f"05{destination}{source}{ttl}{seq}"
+    send_message(message_string)
+    print("forwarding ack: " + message_string)
+
 
 
 def check_buffer():
@@ -179,17 +204,20 @@ def handle_incomming_message(message):                                          
         print(flag + " " + dest + " " + src + " " + str(ttl) + " " + str(seq) + " " + payload)
         if flag == '00':
             print("incomming chat message")
-            temp_message = Message(dest, src, ttl, seq, payload)                            #ÜBERARBEITEN!!!!!!!!!!!!!!!!!!
+            temp_message = Message(dest, src, ttl, seq, payload)
             message_box.append(temp_message)
             print(message_box)
-            #temp_message = None
-            #send_acknowledgement(dest)                                                      #TTL SEQ ??????? 2 mal was versuchen???
-            # if dest == config['freq']:
-            #     print("juhu ich hab meine nachricht bekommen: " + message)
-            #     return
-            # if dest in routing_table and routing_table[dest] > 1:
-            #     print("forwarding message...")
-            #     forward_chat_message(dest, src, ttl, seq, payload)                          #Wie soll das funktionieren????
+            if dest == lora_config['freq']:
+                print(f"Got my message: {temp_message}")
+                if src in routing_table:
+                    send_acknowledgement(src)                                 # ToDo: add ack
+                else:
+                    print("can't send ack sry")
+            else:
+                if dest in routing_table and ttl > 1:
+                    forward_chat_message(dest, src, ttl-1, seq+1, payload)
+                else:
+                    print("Can't forward message!")
         elif flag == '01':
             print("incomming self_propagation message")
             change = False
@@ -197,7 +225,7 @@ def handle_incomming_message(message):                                          
                 new_route = Route(src, 1, real_src)
                 routing_table[src] = new_route
                 change = True
-            if src in routing_table: # updating timestamp and hopcount                                    # ToDo: check for hopcount > 1 !!!
+            if src in routing_table: # updating timestamp and hopcount
                 route = routing_table[src]
                 if route.hop_count > 1:
                     routing_table[src] = Route(src, 1, real_src)
@@ -226,50 +254,45 @@ def handle_incomming_message(message):                                          
                         new_route = Route(addr,  1, real_src)
                         routing_table[addr] = new_route
                         print(routing_table)
-                        change = True
                     elif int(hop)+1 < routing_table[addr].hop_count:
                         new_route = Route(addr, hop+1, real_src)
                         routing_table[addr] = new_route
                         print(routing_table)
-                        change = True
             if change:
-                # print("Routing_Table has changed: sending new routing table! (Dummy)")
                 routing_table_propagation()
-        elif flag == '05':
+        elif flag == '05':                                                                                  # ToDo: test
             print('incomming acknowlagement message')
+            if dest == lora_config['freq']:
+                print(f"Got ack: {message}")
+            else:
+                if dest in routing_table and ttl > 1:
+                    forward_acknowledgement(dest, src, ttl-1, seq+1)
+                else:
+                    print("Can't forward ack! Adress not found")
+
+
         else:
             print('wrong message')
     elif "AT," in message:
-        #print("Handle: AT-message detected: " + message)
-        #print("Buffer : ")
-        #print(buffer_list)
+        # Do nothing here
         xyz = 1
 
     else:
-        print("popping : " + message)
+        print("Wrong message popping : " + message)
         print(buffer_list)
         buffer_list.pop(0)
         print("Buffer after wrong message pop: ")
         print(buffer_list)
 
 
-
-# empfange Daten
-# receive()
-#start_new_thread(receive, ())
-#start_new_thread(check_buffer, ())
-#start_new_thread(self_propagation, ())
-
 # New threading module
 receive_thread = Thread(target=receive)
 check_buffer_thread = Thread(target=check_buffer)
 selfpropagation_thread = Thread(target=self_propagation)
 
-
 receive_thread.start()
 check_buffer_thread.start()
 selfpropagation_thread.start()
-
 
 
 def command_line():
@@ -284,9 +307,8 @@ def command_line():
             break
         elif eingabe == "1":
             addr = input("adresse: ")
-            change_dest(addr)
             message = input("message: ")
-            send_chat_message(addr, lora_config['freq'], message)
+            send_chat_message(addr, message)
         elif eingabe == "2":
             print(routing_table)
         elif eingabe == "3":
