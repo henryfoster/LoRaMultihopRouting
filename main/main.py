@@ -45,6 +45,7 @@ def change_dest(addr):                                                          
                 break
         trys += 1
 
+
 # used to send 'String' messages via AT+SEND
 def send_message(message):
     lock.acquire()
@@ -58,7 +59,7 @@ def send_message(message):
                 buffer_list.remove(i)
                 # print("send_message(): got AT,OK from bufferlist and removing it")
                 ser.write(str.encode(f"{message}\r\n"))
-                print(f"Message sending: {message}")
+                #print(f"Message sending: {message}")
                 trys = 10
                 break
         trys += 1
@@ -136,7 +137,7 @@ def forward_chat_message(destination, source, ttl, seq, payload):               
 # Type: 01
 def self_propagation():                                                                         # Tested: True
     while True:
-        time.sleep(60)
+        time.sleep(20)
         message_string = f"01FFFF{lora_config['freq']}0100"
         change_dest("ffff")
         send_message(message_string)
@@ -151,7 +152,7 @@ def routing_table_propagation():                                                
         message_string += key
         message_string += str(add_leading_zero(routing_table[key].hop_count))
     send_message(message_string)
-    print("sending Routing table propagation: " + message_string)
+    #print("sending Routing table propagation: " + message_string)
 
 
 # Protocol: Acknowledgement (outgoing)
@@ -162,7 +163,8 @@ def send_acknowledgement(destination):                                          
     change_dest(routing_table[destination].next_hop)
     message_string = f"05{destination}{lora_config['freq']}{ttl}00"
     send_message(message_string)
-    print("sending ack: " + message_string)
+    #print("sending ack: " + message_string)
+
 
 # Protocol: Acknowledgement (reactive)
 # Type: 05
@@ -172,8 +174,7 @@ def forward_acknowledgement(destination, source, ttl, seq):                     
     change_dest(routing_table[destination].next_hop)
     message_string = f"05{destination}{source}{ttl}{seq}"
     send_message(message_string)
-    print("forwarding ack: " + message_string)
-
+    #print("forwarding ack: " + message_string)
 
 
 def check_buffer():
@@ -187,10 +188,10 @@ def check_buffer():
 
 def handle_incomming_message(message):                                                 #in einzelne funktionen auslagern
     if "LR" in message:
-        print("handle detected LR message: " + message)
+        # print("handle detected LR message: " + message)
         buffer_list.pop(0)
-        print("Buffer after LR pop: " )
-        print(buffer_list)
+        # print("Buffer after LR pop: " )
+        # print(buffer_list)
         message = message.replace('\r', '')
         message = message.replace('\n', '')
         real_src =  message[3:7]
@@ -201,7 +202,7 @@ def handle_incomming_message(message):                                          
         ttl = int(message[10:12])
         seq = int(message[12:14])
         payload = message[14:]
-        print(flag + " " + dest + " " + src + " " + str(ttl) + " " + str(seq) + " " + payload)
+        # print(flag + " " + dest + " " + src + " " + str(ttl) + " " + str(seq) + " " + payload)
         if flag == '00':
             print("incomming chat message")
             temp_message = Message(dest, src, ttl, seq, payload)
@@ -219,7 +220,7 @@ def handle_incomming_message(message):                                          
                 else:
                     print("Can't forward message!")
         elif flag == '01':
-            print("incomming self_propagation message")
+            #print("incomming self_propagation message")
             change = False
             if src not in routing_table:
                 new_route = Route(src, 1, real_src)
@@ -235,35 +236,37 @@ def handle_incomming_message(message):                                          
             if change:
                 routing_table_propagation()
                 # print("propagiere routing tabelle platzhalter")
-            print("printing routingtable :")
-            print(routing_table)
+            #print("printing routingtable :")
+            #print(routing_table)
         elif flag == '02':
-            print('incomming routing_table_propagation')
+            #print('incomming routing_table_propagation')
             change = False
             for i in range(0,len(payload), 6):
                 addr = payload[i:i+4]
                 hop = int(payload[i+4:i+6])
-                print(f"{addr} : {hop}")
+                #print(f"{addr} : {hop}")
                 if addr not in routing_table:
-                    new_route = Route(addr, hop+1, real_src)
-                    routing_table[addr] = new_route
-                    print(routing_table)
-                    change = True
+                    if lora_config['freq'] != addr:
+                        new_route = Route(addr, hop+1, real_src)
+                        routing_table[addr] = new_route
+                        #print(routing_table)
+                        change = True
                 elif addr in routing_table:
                     if addr == real_src and routing_table[addr].hop_count != 1:
                         new_route = Route(addr,  1, real_src)
                         routing_table[addr] = new_route
-                        print(routing_table)
+                        #print(routing_table)
                     elif int(hop)+1 < routing_table[addr].hop_count:
                         new_route = Route(addr, hop+1, real_src)
                         routing_table[addr] = new_route
-                        print(routing_table)
+                        #print(routing_table)
             if change:
                 routing_table_propagation()
         elif flag == '05':                                                                                  # ToDo: test
-            print('incomming acknowlagement message')
+            #print('incomming acknowlagement message')
             if dest == lora_config['freq']:
-                print(f"Got ack: {message}")
+                # print(f"Got ack: {message}")
+                klo = 0
             else:
                 if dest in routing_table and ttl > 1:
                     forward_acknowledgement(dest, src, ttl-1, seq+1)
@@ -278,11 +281,11 @@ def handle_incomming_message(message):                                          
         xyz = 1
 
     else:
-        print("Wrong message popping : " + message)
-        print(buffer_list)
+        #print("Wrong message popping : " + message)
+        #print(buffer_list)
         buffer_list.pop(0)
-        print("Buffer after wrong message pop: ")
-        print(buffer_list)
+        #print("Buffer after wrong message pop: ")
+        #print(buffer_list)
 
 
 # New threading module

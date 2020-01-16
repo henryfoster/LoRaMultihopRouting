@@ -22,4 +22,4 @@ class Route:
         return self.adress == other.adress and self.hop_count == other.hop_count and self.next_hop == other.next_hop
 
     def __repr__(self):
-        return f"Route: {self.adress} | {self.hop_count} | {self.next_hop}"
+        return f"{self.adress} | {self.hop_count} | {self.next_hop}"

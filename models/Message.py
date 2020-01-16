@@ -13,7 +13,6 @@ class Message:
         self.payload = payload
         self.timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
 
-
     # dest
     def set_dest(self, dest):
         self.dest = dest
